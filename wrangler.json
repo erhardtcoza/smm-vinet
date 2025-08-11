@@ -2,14 +2,45 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "smm-vinet",
   "main": "./src/worker/index.ts",
-  "compatibility_date": "2025-04-01",
+  "compatibility_date": "2025-08-08",
   "compatibility_flags": ["nodejs_compat"],
+
   "observability": {
     "enabled": true
   },
   "upload_source_maps": true,
+
   "assets": {
     "directory": "./dist/client",
+    "html_handling": "auto-trailing-slash",
     "not_found_handling": "single-page-application"
-  }
+  },
+
+  "vars": {
+    "META_APP_ID": "",
+    "META_APP_SECRET": "",
+    "LINKEDIN_CLIENT_ID": "",
+    "LINKEDIN_CLIENT_SECRET": "",
+    "X_BEARER": ""
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "smm-db",
+      "database_id": "d93fa292-cb4f-49b3-88ed-e413f3b2982b"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "f657d570a04545d4b18f1a8818d4166f"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "smm-exports"
+    }
+  ]
 }
