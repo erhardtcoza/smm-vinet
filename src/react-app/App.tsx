@@ -1,6 +1,28 @@
 // src/react-app/App.tsx
 import { useState } from "react";
 import "./App.css";
+useEffect(() => {
+  const saved = localStorage.getItem("companyId");
+  const id = saved ? Number(saved) : null;
+  if (!id) return;
+  setCompanyId(id);
+  fetch("/api/company")
+    .then((r) => r.json())
+    .then((j) => {
+      const c = j.company || {};
+      setCompany({
+        name: c.name || "",
+        description: c.description || "",
+        tone: c.tone || "direct",
+        site_url: c.site_url || "",
+        logo_url: c.logo_url || "",
+        socials: safeString(c.socials_json),
+        colors: safeString(c.colors_json),
+      });
+    })
+    .catch(() => {});
+}, []);
+
 
 // Types
 type Plan = { id: number; week_start: string; platform: string; status: string };
@@ -73,8 +95,14 @@ export default function App() {
     const j = await r.json();
     if (j.error) return alert(j.error);
     setCompanyId(j.id);
+    localStorage.setItem("companyId", String(j.id));
     push(`Company saved: ${j.id}`);
   }
+
+  function safeString(x: any) {
+  if (!x) return "";
+  try { return typeof x === "string" ? x : JSON.stringify(x); } catch { return ""; }
+}
 
   async function ingest() {
     if (!companyId) return alert("Save company first");
