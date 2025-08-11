@@ -42,7 +42,21 @@ app.post("/api/company", async (c) => {
   const { name, description, tone, site_url, socials, logo_url, colors } = body || {};
   if (!name || !site_url) return c.json({ error: "name and site_url required" }, 400);
 
-  const res = await env.DB
+onst res = await env.DB
+     .prepare(
+       `INSERT INTO company (name, description, tone, site_url, socials_json, logo_url, colors_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?)`
+     )
+     .bind(
+       name,
+       description ?? null,
+       tone ?? null,
+       site_url,
+       JSON.stringify(socials || {}),
+       logo_url ?? null,
+       JSON.stringify(colors || {})
+     )
+     .run();
     .prepare(
       `INSERT INTO company (name, description, tone, site_url, socials_json, logo_url, colors_json)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -58,7 +72,7 @@ app.post("/api/company", async (c) => {
     )
     .run();
 
-  return c.json({ id: res.lastInsertRowid });
+  return c.json({ id: res.meta.last_row_id });
 });
 
 // Get latest company (MVP)
