@@ -14,10 +14,9 @@ type Env = {
   X_BEARER: string;
 };
 
-// Create app
 const app = new Hono<{ Bindings: Env }>();
 
-// -------- CORS for /api ----------
+// ---------- CORS (API only) ----------
 app.use("/api/*", async (c, next) => {
   if (c.req.method === "OPTIONS") {
     return c.text("ok", 200, {
@@ -32,17 +31,16 @@ app.use("/api/*", async (c, next) => {
   c.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
 });
 
-// -------- API ROUTES -------------
+// ---------- API ----------
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
 // Create company
 app.post("/api/company", async (c) => {
-  const env = c.env;
   const body = (await c.req.json().catch(() => ({}))) as any;
   const { name, description, tone, site_url, socials, logo_url, colors } = body || {};
   if (!name || !site_url) return c.json({ error: "name and site_url required" }, 400);
 
-  const res = await env.DB
+  const res = await c.env.DB
     .prepare(
       `INSERT INTO company (name, description, tone, site_url, socials_json, logo_url, colors_json)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -62,26 +60,25 @@ app.post("/api/company", async (c) => {
   return c.json({ id });
 });
 
-// Latest company
+// Latest company (for hydration)
 app.get("/api/company", async (c) => {
   const row = await c.env.DB.prepare("SELECT * FROM company ORDER BY id DESC LIMIT 1").first();
   return c.json({ company: row ?? null });
 });
 
-// Ingest site
+// Ingest site (sitemap + naive parse)
 app.post("/api/ingest", async (c) => {
-  const env = c.env;
   const { company_id, limit = 20 } = (await c.req.json().catch(() => ({}))) as any;
   if (!company_id) return c.json({ error: "company_id required" }, 400);
 
-  const company = await env.DB.prepare("SELECT * FROM company WHERE id=?").bind(company_id).first();
+  const company = await c.env.DB.prepare("SELECT * FROM company WHERE id=?").bind(company_id).first();
   if (!company) return c.json({ error: "company not found" }, 404);
 
-  const pages = await ingestSite((company as any).site_url as string, env, limit);
+  const pages = await ingestSite((company as any).site_url as string, c.env, limit);
   const products = extractProducts(pages);
 
   for (const p of products) {
-    await env.DB
+    await c.env.DB
       .prepare(
         `INSERT INTO product (company_id, title, url, summary, price, images_json, tags)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -100,33 +97,31 @@ app.post("/api/ingest", async (c) => {
   return c.json({ pages: pages.length, products: products.length });
 });
 
-// Weekly plan
+// Generate weekly plan
 app.post("/api/plan/week", async (c) => {
-  const env = c.env;
   const { company_id, week_start, platforms = ["facebook", "instagram", "linkedin", "x"] } =
     (await c.req.json().catch(() => ({}))) as any;
   if (!company_id || !week_start) return c.json({ error: "company_id and week_start required" }, 400);
 
-  const company = await env.DB.prepare("SELECT * FROM company WHERE id=?").bind(company_id).first();
+  const company = await c.env.DB.prepare("SELECT * FROM company WHERE id=?").bind(company_id).first();
   if (!company) return c.json({ error: "company not found" }, 404);
 
-  const prods = await env.DB.prepare("SELECT * FROM product WHERE company_id=? LIMIT 20")
+  const prods = await c.env.DB.prepare("SELECT * FROM product WHERE company_id=? LIMIT 20")
     .bind(company_id)
     .all();
 
   const planJson = buildWeeklyPlan(company as any, (prods.results as any[]) || [], platforms);
 
-  const planRes = await env.DB
+  const planRes = await c.env.DB
     .prepare(
       "INSERT INTO content_plan (company_id, week_start, platform, status, json) VALUES (?, ?, ?, ?, ?)"
     )
     .bind(company_id, week_start, "multi", "draft", JSON.stringify(planJson))
     .run();
-
   const planId = Number((planRes.meta as any)?.last_row_id ?? 0);
 
   for (const post of planJson.posts) {
-    await env.DB
+    await c.env.DB
       .prepare(
         "INSERT INTO post (plan_id, platform, caption, hashtags, image_prompt, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)"
       )
@@ -174,12 +169,11 @@ app.get("/api/posts", async (c) => {
 
 // Add competitors
 app.post("/api/competitors", async (c) => {
-  const env = c.env;
   const { company_id, competitors = [] } = (await c.req.json().catch(() => ({}))) as any;
   if (!company_id) return c.json({ error: "company_id required" }, 400);
 
   for (const comp of competitors) {
-    await env.DB
+    await c.env.DB
       .prepare("INSERT INTO competitor (company_id, name, url, socials_json) VALUES (?, ?, ?, ?)")
       .bind(company_id, comp.name || null, comp.url, JSON.stringify(comp.socials || {}))
       .run();
@@ -263,19 +257,15 @@ app.post("/api/export/zip", async (c) => {
   return c.json({ r2_key: key });
 });
 
-// -------- Static assets fallback (for all non-/api paths) --------
+// ---------- Static assets fallback ----------
 app.all("*", async (c) => {
-  // If API path somehow reaches here, 404 it
   if (c.req.path.startsWith("/api/")) return c.text("Not found", 404);
-  // Serve built React app from [assets] binding (wrangler.json → assets.directory)
-  const resp = await c.env.ASSETS.fetch(c.req.raw);
-  return resp;
+  return c.env.ASSETS.fetch(c.req.raw);
 });
 
-// ========== Export ==========
 export default app;
 
-// ------------- Helpers ----------------
+// ===== Helpers =====
 async function ingestSite(baseUrl: string, env: Env, limit: number) {
   const key = `sitemap:${baseUrl}`;
   const cached = await env.CACHE.get(key);
