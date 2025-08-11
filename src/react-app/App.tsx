@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 
 // --- Types ---
@@ -36,15 +36,8 @@ export default function App() {
   });
   const [companyId, setCompanyId] = useState<number | null>(null);
 
-  const [week, setWeek] = useState<string>(
-    new Date().toISOString().slice(0, 10)
-  );
-  const [platforms, setPlatforms] = useState<string[]>([
-    "facebook",
-    "instagram",
-    "linkedin",
-    "x",
-  ]);
+  const [week, setWeek] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [platforms, setPlatforms] = useState<string[]>(["facebook", "instagram", "linkedin", "x"]);
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
@@ -63,7 +56,6 @@ export default function App() {
 
     setCompanyId(id);
 
-    // hydrate latest company
     fetch("/api/company")
       .then((r) => r.json())
       .then((j) => {
@@ -145,9 +137,7 @@ export default function App() {
     if (!companyId) return alert("Save company first");
     if (!auditUrl) return alert("Enter a URL to audit");
     const r = await fetch(
-      `/api/seo/audit?company_id=${companyId}&url=${encodeURIComponent(
-        auditUrl
-      )}`
+      `/api/seo/audit?company_id=${companyId}&url=${encodeURIComponent(auditUrl)}`
     );
     const j = await r.json();
     if (j.error) return alert(j.error);
@@ -187,9 +177,7 @@ export default function App() {
             placeholder="Description"
             rows={4}
             value={company.description}
-            onChange={(e) =>
-              setCompany({ ...company, description: e.target.value })
-            }
+            onChange={(e) => setCompany({ ...company, description: e.target.value })}
           />
           <input
             className="input"
@@ -201,35 +189,27 @@ export default function App() {
             className="input"
             placeholder="Website URL"
             value={company.site_url}
-            onChange={(e) =>
-              setCompany({ ...company, site_url: e.target.value })
-            }
+            onChange={(e) => setCompany({ ...company, site_url: e.target.value })}
           />
           <input
             className="input"
             placeholder="Logo URL"
             value={company.logo_url}
-            onChange={(e) =>
-              setCompany({ ...company, logo_url: e.target.value })
-            }
+            onChange={(e) => setCompany({ ...company, logo_url: e.target.value })}
           />
           <textarea
             className="input"
             placeholder='Socials JSON (e.g., {"facebook":"...","instagram":"..."})'
             rows={2}
             value={company.socials}
-            onChange={(e) =>
-              setCompany({ ...company, socials: e.target.value })
-            }
+            onChange={(e) => setCompany({ ...company, socials: e.target.value })}
           />
           <textarea
             className="input"
             placeholder='Colors JSON (e.g., {"primary":"#e2001a"})'
             rows={2}
             value={company.colors}
-            onChange={(e) =>
-              setCompany({ ...company, colors: e.target.value })
-            }
+            onChange={(e) => setCompany({ ...company, colors: e.target.value })}
           />
           <button className="btn" onClick={saveCompany}>
             Save Company
@@ -436,7 +416,6 @@ function parseMaybeJson(x: string) {
     return {};
   }
 }
-
 function safeString(x: unknown) {
   if (!x) return "";
   try {
