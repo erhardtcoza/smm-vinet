@@ -14,10 +14,10 @@ type Env = {
   X_BEARER: string;
 };
 
-// ---- App ----
+// Create app
 const app = new Hono<{ Bindings: Env }>();
 
-// CORS (simple, permissive for MVP)
+// -------- CORS for /api ----------
 app.use("/api/*", async (c, next) => {
   if (c.req.method === "OPTIONS") {
     return c.text("ok", 200, {
@@ -32,31 +32,17 @@ app.use("/api/*", async (c, next) => {
   c.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
 });
 
-// ---- API routes ----
+// -------- API ROUTES -------------
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
-// Create company (insert only for MVP)
+// Create company
 app.post("/api/company", async (c) => {
   const env = c.env;
-  const body = await c.req.json<any>();
+  const body = (await c.req.json().catch(() => ({}))) as any;
   const { name, description, tone, site_url, socials, logo_url, colors } = body || {};
   if (!name || !site_url) return c.json({ error: "name and site_url required" }, 400);
 
-onst res = await env.DB
-     .prepare(
-       `INSERT INTO company (name, description, tone, site_url, socials_json, logo_url, colors_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?)`
-     )
-     .bind(
-       name,
-       description ?? null,
-       tone ?? null,
-       site_url,
-       JSON.stringify(socials || {}),
-       logo_url ?? null,
-       JSON.stringify(colors || {})
-     )
-     .run();
+  const res = await env.DB
     .prepare(
       `INSERT INTO company (name, description, tone, site_url, socials_json, logo_url, colors_json)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -72,26 +58,26 @@ onst res = await env.DB
     )
     .run();
 
-  return c.json({ id: res.meta.last_row_id });
+  const id = Number((res.meta as any)?.last_row_id ?? 0);
+  return c.json({ id });
 });
 
-// Get latest company (MVP)
+// Latest company
 app.get("/api/company", async (c) => {
-  const env = c.env;
-  const row = await env.DB.prepare("SELECT * FROM company ORDER BY id DESC LIMIT 1").first();
+  const row = await c.env.DB.prepare("SELECT * FROM company ORDER BY id DESC LIMIT 1").first();
   return c.json({ company: row ?? null });
 });
 
-// Ingest site (sitemap + naive HTML parse)
+// Ingest site
 app.post("/api/ingest", async (c) => {
   const env = c.env;
-  const { company_id, limit = 20 } = await c.req.json<any>();
+  const { company_id, limit = 20 } = (await c.req.json().catch(() => ({}))) as any;
   if (!company_id) return c.json({ error: "company_id required" }, 400);
 
   const company = await env.DB.prepare("SELECT * FROM company WHERE id=?").bind(company_id).first();
   if (!company) return c.json({ error: "company not found" }, 404);
 
-  const pages = await ingestSite(company.site_url as string, env, limit);
+  const pages = await ingestSite((company as any).site_url as string, env, limit);
   const products = extractProducts(pages);
 
   for (const p of products) {
@@ -114,11 +100,11 @@ app.post("/api/ingest", async (c) => {
   return c.json({ pages: pages.length, products: products.length });
 });
 
-// Generate weekly plan
+// Weekly plan
 app.post("/api/plan/week", async (c) => {
   const env = c.env;
   const { company_id, week_start, platforms = ["facebook", "instagram", "linkedin", "x"] } =
-    await c.req.json<any>();
+    (await c.req.json().catch(() => ({}))) as any;
   if (!company_id || !week_start) return c.json({ error: "company_id and week_start required" }, 400);
 
   const company = await env.DB.prepare("SELECT * FROM company WHERE id=?").bind(company_id).first();
@@ -128,14 +114,16 @@ app.post("/api/plan/week", async (c) => {
     .bind(company_id)
     .all();
 
-  const planJson = buildWeeklyPlan(company, prods.results || [], platforms);
+  const planJson = buildWeeklyPlan(company as any, (prods.results as any[]) || [], platforms);
 
-  const { lastInsertRowid } = await env.DB
+  const planRes = await env.DB
     .prepare(
       "INSERT INTO content_plan (company_id, week_start, platform, status, json) VALUES (?, ?, ?, ?, ?)"
     )
     .bind(company_id, week_start, "multi", "draft", JSON.stringify(planJson))
     .run();
+
+  const planId = Number((planRes.meta as any)?.last_row_id ?? 0);
 
   for (const post of planJson.posts) {
     await env.DB
@@ -143,7 +131,7 @@ app.post("/api/plan/week", async (c) => {
         "INSERT INTO post (plan_id, platform, caption, hashtags, image_prompt, scheduled_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)"
       )
       .bind(
-        lastInsertRowid,
+        planId,
         post.platform,
         post.caption,
         (post.hashtags || []).join(" "),
@@ -153,16 +141,15 @@ app.post("/api/plan/week", async (c) => {
       )
       .run();
   }
-  return c.json({ plan_id: lastInsertRowid, count: planJson.posts.length });
+  return c.json({ plan_id: planId, count: planJson.posts.length });
 });
 
 // Plans list
 app.get("/api/plans", async (c) => {
-  const env = c.env;
   const company_id = c.req.query("company_id");
   if (!company_id) return c.json({ error: "company_id required" }, 400);
 
-  const rows = await env.DB.prepare(
+  const rows = await c.env.DB.prepare(
     "SELECT id, week_start, platform, status FROM content_plan WHERE company_id=? ORDER BY id DESC LIMIT 20"
   )
     .bind(company_id)
@@ -173,11 +160,10 @@ app.get("/api/plans", async (c) => {
 
 // Posts by plan
 app.get("/api/posts", async (c) => {
-  const env = c.env;
   const plan_id = c.req.query("plan_id");
   if (!plan_id) return c.json({ error: "plan_id required" }, 400);
 
-  const rows = await env.DB.prepare(
+  const rows = await c.env.DB.prepare(
     "SELECT id, platform, scheduled_at, caption, hashtags, image_prompt, status FROM post WHERE plan_id=? ORDER BY scheduled_at"
   )
     .bind(plan_id)
@@ -189,7 +175,7 @@ app.get("/api/posts", async (c) => {
 // Add competitors
 app.post("/api/competitors", async (c) => {
   const env = c.env;
-  const { company_id, competitors = [] } = await c.req.json<any>();
+  const { company_id, competitors = [] } = (await c.req.json().catch(() => ({}))) as any;
   if (!company_id) return c.json({ error: "company_id required" }, 400);
 
   for (const comp of competitors) {
@@ -203,15 +189,14 @@ app.post("/api/competitors", async (c) => {
 
 // List competitors + light analysis
 app.get("/api/competitors", async (c) => {
-  const env = c.env;
   const company_id = c.req.query("company_id");
   if (!company_id) return c.json({ error: "company_id required" }, 400);
 
-  const rows = await env.DB.prepare("SELECT * FROM competitor WHERE company_id=?")
+  const rows = await c.env.DB.prepare("SELECT * FROM competitor WHERE company_id=?")
     .bind(company_id)
     .all();
 
-  const analysis = await analyzeCompetitors(rows.results || []);
+  const analysis = await analyzeCompetitors((rows.results as any[]) || []);
   return c.json({ competitors: rows.results, analysis });
 });
 
@@ -248,11 +233,10 @@ app.get("/api/seo/audit", async (c) => {
 
 // SEO: list audited pages
 app.get("/api/seo/pages", async (c) => {
-  const env = c.env;
   const company_id = c.req.query("company_id");
   if (!company_id) return c.json({ error: "company_id required" }, 400);
 
-  const rows = await env.DB.prepare(
+  const rows = await c.env.DB.prepare(
     "SELECT id, url, title, h1, meta_desc, score, last_checked, issues_json FROM seo_page WHERE company_id=? ORDER BY last_checked DESC NULLS LAST, id DESC LIMIT 100"
   )
     .bind(company_id)
@@ -264,7 +248,7 @@ app.get("/api/seo/pages", async (c) => {
 // Export CSV to R2
 app.post("/api/export/zip", async (c) => {
   const env = c.env;
-  const { plan_id } = await c.req.json<any>();
+  const { plan_id } = (await c.req.json().catch(() => ({}))) as any;
   if (!plan_id) return c.json({ error: "plan_id required" }, 400);
 
   const rows = await env.DB.prepare(
@@ -273,28 +257,25 @@ app.post("/api/export/zip", async (c) => {
     .bind(plan_id)
     .all();
 
-  const csv = toCSV(rows.results || []);
+  const csv = toCSV((rows.results as any[]) || []);
   const key = `exports/plan_${plan_id}_${Date.now()}.csv`;
   await env.R2.put(key, csv, { httpMetadata: { contentType: "text/csv" } });
   return c.json({ r2_key: key });
 });
 
-// ---- Final export: API first, then static assets fallback ----
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    const url = new URL(request.url);
-    if (url.pathname.startsWith("/api/")) {
-      return app.fetch(request, env, ctx);
-    }
-    // serve built React app via [assets] binding
-    const assetResp = await env.ASSETS.fetch(request);
-    if (assetResp.status !== 404) return assetResp;
-    // hard 404
-    return new Response("Not found", { status: 404 });
-  },
-};
+// -------- Static assets fallback (for all non-/api paths) --------
+app.all("*", async (c) => {
+  // If API path somehow reaches here, 404 it
+  if (c.req.path.startsWith("/api/")) return c.text("Not found", 404);
+  // Serve built React app from [assets] binding (wrangler.json → assets.directory)
+  const resp = await c.env.ASSETS.fetch(c.req.raw);
+  return resp;
+});
 
-// ---- Helpers ----
+// ========== Export ==========
+export default app;
+
+// ------------- Helpers ----------------
 async function ingestSite(baseUrl: string, env: Env, limit: number) {
   const key = `sitemap:${baseUrl}`;
   const cached = await env.CACHE.get(key);
@@ -326,14 +307,7 @@ async function ingestSite(baseUrl: string, env: Env, limit: number) {
 
 function extractProducts(
   pages: { url: string; html: string }[]
-): {
-  title: string;
-  url: string;
-  summary: string;
-  price?: string;
-  images?: string[];
-  tags?: string[];
-}[] {
+): { title: string; url: string; summary: string; price?: string; images?: string[]; tags?: string[] }[] {
   const items: any[] = [];
   for (const p of pages) {
     const titles = [...p.html.matchAll(/<(h2|h3)[^>]*>(.*?)<\/\1>/gi)].map((m) => strip(m[2]));
@@ -357,14 +331,9 @@ function buildWeeklyPlan(company: any, products: any[], platforms: string[]) {
   const posts: any[] = [];
   const now = new Date();
   for (let d = 0; d < 7; d++) {
-    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + d)
-      .toISOString()
-      .slice(0, 10);
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + d).toISOString().slice(0, 10);
     const prod =
-      products[d % Math.max(1, products.length)] || {
-        title: company.name,
-        summary: company.description,
-      };
+      products[d % Math.max(1, products.length)] || { title: company.name, summary: company.description };
     for (const platform of platforms) {
       posts.push({
         platform,
@@ -383,13 +352,11 @@ function captionTemplate(_platform: string, prod: any, _tone: string) {
   const cta = "Chat to us: 021 007 0200 | sales@vinet.co.za";
   return `${line}\n${cta}`.trim();
 }
-
 function baseHashtags(_name: string, prod: any) {
   const tags = ["#Vinet", "#Internet", "#Connectivity", "#Fibre", "#Wireless"];
   if (prod?.tags?.length) tags.push(...prod.tags.slice(0, 3).map((t: string) => `#${t.replace(/\s+/g, "")}`));
   return dedupeBy(tags, (x: string) => x);
 }
-
 function imagePrompt(prod: any, company: any) {
   return `Minimal ad tile for ${company.name}. Headline: ${prod.title}. Colors: brand palette if available. Include logo if available.`;
 }
@@ -401,13 +368,7 @@ async function analyzeCompetitors(list: any[]) {
       const res = await fetch(c.url);
       const html = await res.text();
       const title = (html.match(/<title>(.*?)<\/title>/i) || [])[1] || "";
-      out.push({
-        id: c.id,
-        url: c.url,
-        title,
-        cadence_guess: "weekly",
-        topic_guess: ["pricing", "coverage", "support"],
-      });
+      out.push({ id: c.id, url: c.url, title, cadence_guess: "weekly", topic_guess: ["pricing", "coverage", "support"] });
     } catch {
       out.push({ id: c.id, url: c.url, error: "fetch_failed" });
     }
@@ -418,7 +379,6 @@ async function analyzeCompetitors(list: any[]) {
 async function auditPage(url: string) {
   const res = await fetch(url);
   if (!res.ok) return { url, score: 0, issues: [{ id: "fetch", msg: `HTTP ${res.status}` }] };
-
   const html = await res.text();
   const title = (html.match(/<title>(.*?)<\/title>/i) || [])[1] || "";
   const h1 = (html.match(/<h1[^>]*>(.*?)<\/h1>/i) || [])[1] || "";
@@ -426,14 +386,12 @@ async function auditPage(url: string) {
     (html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i) || [])[1] || "";
   const imgAltsMissing = (html.match(/<img\b(?![^>]*alt=)[^>]*>/gi) || []).length;
   const links = (html.match(/<a\b[^>]*href=/gi) || []).length;
-
   const issues: any[] = [];
   if (!title) issues.push({ id: "title", msg: "Missing <title>" });
   if (!h1) issues.push({ id: "h1", msg: "Missing <h1>" });
   if (!meta_desc) issues.push({ id: "meta", msg: "Missing meta description" });
   if (imgAltsMissing > 0) issues.push({ id: "img_alt", msg: `${imgAltsMissing} images missing alt` });
   if (links < 5) issues.push({ id: "links", msg: "Low internal link count" });
-
   const score = Math.max(0, 100 - issues.length * 12);
   return { url, title: strip(title), h1: strip(h1), meta_desc: strip(meta_desc), score, issues };
 }
@@ -446,7 +404,7 @@ function toCSV(rows: any[]) {
   return header + "\n" + lines.join("\n");
 }
 
-// ---- tiny utils ----
+// utils
 function strip(s?: string) {
   return s?.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim() ?? "";
 }
@@ -454,9 +412,7 @@ function truncate(s: string, n: number) {
   return (s || "").length > n ? s.slice(0, n - 1) + "…" : s || "";
 }
 function summarizeFromHtml(html: string) {
-  const text = strip(
-    html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ")
-  );
+  const text = strip(html.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " "));
   return text.split(/\s+/).slice(0, 40).join(" ");
 }
 function guessTags(html: string) {
