@@ -24,9 +24,6 @@ type SeoRow = {
   issues_json: string | null;
 };
 
-// Same-origin API
-const API = ""; // fetch(`${API}/api/...`) -> "/api/..."
-
 export default function App() {
   // Company form
   const [company, setCompany] = useState({
