@@ -1,30 +1,7 @@
-// src/react-app/App.tsx
-import { useState } from "react";
+import React, { useEffect, useState } from "react";
 import "./App.css";
-useEffect(() => {
-  const saved = localStorage.getItem("companyId");
-  const id = saved ? Number(saved) : null;
-  if (!id) return;
-  setCompanyId(id);
-  fetch("/api/company")
-    .then((r) => r.json())
-    .then((j) => {
-      const c = j.company || {};
-      setCompany({
-        name: c.name || "",
-        description: c.description || "",
-        tone: c.tone || "direct",
-        site_url: c.site_url || "",
-        logo_url: c.logo_url || "",
-        socials: safeString(c.socials_json),
-        colors: safeString(c.colors_json),
-      });
-    })
-    .catch(() => {});
-}, []);
 
-
-// Types
+// --- Types ---
 type Plan = { id: number; week_start: string; platform: string; status: string };
 type Post = {
   id: number;
@@ -47,7 +24,7 @@ type SeoRow = {
 };
 
 export default function App() {
-  // Company form
+  // --- State ---
   const [company, setCompany] = useState({
     name: "",
     description: "",
@@ -59,7 +36,6 @@ export default function App() {
   });
   const [companyId, setCompanyId] = useState<number | null>(null);
 
-  // Planner
   const [week, setWeek] = useState<string>(
     new Date().toISOString().slice(0, 10)
   );
@@ -70,7 +46,6 @@ export default function App() {
     "x",
   ]);
 
-  // Data
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -80,12 +55,38 @@ export default function App() {
 
   const push = (m: string) => setLog((l) => [m, ...l]);
 
-  // Actions
+  // --- Restore on load ---
+  useEffect(() => {
+    const saved = localStorage.getItem("companyId");
+    const id = saved ? Number(saved) : null;
+    if (!id) return;
+
+    setCompanyId(id);
+
+    // hydrate latest company
+    fetch("/api/company")
+      .then((r) => r.json())
+      .then((j) => {
+        const c = (j?.company as any) || {};
+        setCompany({
+          name: c.name || "",
+          description: c.description || "",
+          tone: c.tone || "direct",
+          site_url: c.site_url || "",
+          logo_url: c.logo_url || "",
+          socials: safeString(c.socials_json),
+          colors: safeString(c.colors_json),
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  // --- Actions ---
   async function saveCompany() {
     const payload = {
       ...company,
-      socials: safeJson(company.socials),
-      colors: safeJson(company.colors),
+      socials: parseMaybeJson(company.socials),
+      colors: parseMaybeJson(company.colors),
     };
     const r = await fetch(`/api/company`, {
       method: "POST",
@@ -98,11 +99,6 @@ export default function App() {
     localStorage.setItem("companyId", String(j.id));
     push(`Company saved: ${j.id}`);
   }
-
-  function safeString(x: any) {
-  if (!x) return "";
-  try { return typeof x === "string" ? x : JSON.stringify(x); } catch { return ""; }
-}
 
   async function ingest() {
     if (!companyId) return alert("Save company first");
@@ -168,87 +164,97 @@ export default function App() {
     push(`Loaded SEO rows: ${j.pages?.length || 0}`);
   }
 
-  // UI
+  // --- UI ---
   return (
-    <div style={wrap}>
-      <h2>Social Media Planner</h2>
-      <p style={muted}>Setup → Ingest → Plan → Plans → SEO.</p>
+    <div className="container">
+      <h2 style={{ textAlign: "center", marginTop: 4 }}>Social Media Planner</h2>
+      <p className="hint" style={{ textAlign: "center" }}>
+        Setup → Ingest → Plan → Plans → SEO.
+      </p>
 
       {/* Company + Ingest + Plan */}
-      <div style={grid2}>
+      <div className="grid2">
         <div>
           <h3>Company</h3>
           <input
+            className="input"
             placeholder="Name"
             value={company.name}
             onChange={(e) => setCompany({ ...company, name: e.target.value })}
-            style={inp}
           />
           <textarea
+            className="input"
             placeholder="Description"
             rows={4}
             value={company.description}
             onChange={(e) =>
               setCompany({ ...company, description: e.target.value })
             }
-            style={inp}
           />
           <input
+            className="input"
             placeholder="Tone (e.g., direct)"
             value={company.tone}
             onChange={(e) => setCompany({ ...company, tone: e.target.value })}
-            style={inp}
           />
           <input
+            className="input"
             placeholder="Website URL"
             value={company.site_url}
-            onChange={(e) => setCompany({ ...company, site_url: e.target.value })}
-            style={inp}
+            onChange={(e) =>
+              setCompany({ ...company, site_url: e.target.value })
+            }
           />
           <input
+            className="input"
             placeholder="Logo URL"
             value={company.logo_url}
-            onChange={(e) => setCompany({ ...company, logo_url: e.target.value })}
-            style={inp}
+            onChange={(e) =>
+              setCompany({ ...company, logo_url: e.target.value })
+            }
           />
           <textarea
+            className="input"
             placeholder='Socials JSON (e.g., {"facebook":"...","instagram":"..."})'
             rows={2}
             value={company.socials}
-            onChange={(e) => setCompany({ ...company, socials: e.target.value })}
-            style={inp}
+            onChange={(e) =>
+              setCompany({ ...company, socials: e.target.value })
+            }
           />
           <textarea
+            className="input"
             placeholder='Colors JSON (e.g., {"primary":"#e2001a"})'
             rows={2}
             value={company.colors}
-            onChange={(e) => setCompany({ ...company, colors: e.target.value })}
-            style={inp}
+            onChange={(e) =>
+              setCompany({ ...company, colors: e.target.value })
+            }
           />
-          <button onClick={saveCompany} style={btn}>
+          <button className="btn" onClick={saveCompany}>
             Save Company
           </button>
         </div>
 
         <div>
           <h3>Ingest & Plan</h3>
-          <button onClick={ingest} style={btn}>
+          <button className="btn" onClick={ingest}>
             Ingest Website
           </button>
 
           <div style={{ marginTop: 12 }}>
             <label>Week start</label>
             <input
+              className="input"
               type="date"
               value={week}
               onChange={(e) => setWeek(e.target.value)}
-              style={inp}
             />
           </div>
 
           <div style={{ marginTop: 12 }}>
             <label>Platforms</label>
-            <div style={grid4}>
+            <div className="grid4">
               {["facebook", "instagram", "linkedin", "x"].map((p) => (
                 <label key={p}>
                   <input
@@ -266,7 +272,7 @@ export default function App() {
             </div>
           </div>
 
-          <button onClick={makePlan} style={{ ...btn, marginTop: 12 }}>
+          <button className="btn" style={{ marginTop: 12 }} onClick={makePlan}>
             Generate Week Plan
           </button>
         </div>
@@ -274,9 +280,9 @@ export default function App() {
 
       {/* Plans */}
       <h3 style={{ marginTop: 24 }}>Plans</h3>
-      <div style={card}>
+      <div className="card">
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button onClick={loadPlans} style={btn}>
+          <button className="btn" onClick={loadPlans}>
             Load Plans
           </button>
           {plans.length > 0 && (
@@ -333,18 +339,18 @@ export default function App() {
 
       {/* SEO */}
       <h3 style={{ marginTop: 24 }}>SEO</h3>
-      <div style={card}>
+      <div className="card">
         <div style={{ display: "flex", gap: 8 }}>
           <input
+            className="input"
             placeholder="https://example.com/page"
             value={auditUrl}
             onChange={(e) => setAuditUrl(e.target.value)}
-            style={inp}
           />
-          <button onClick={runAudit} style={btn}>
+          <button className="btn" onClick={runAudit}>
             Run Audit
           </button>
-          <button onClick={refreshSeo} style={btn}>
+          <button className="btn" onClick={refreshSeo}>
             Refresh Table
           </button>
         </div>
@@ -422,43 +428,20 @@ export default function App() {
   );
 }
 
-// Styles
-const wrap = {
-  maxWidth: 1100,
-  margin: "40px auto",
-  padding: 24,
-  background: "#fff",
-  border: "1px solid #eee",
-  borderRadius: 16,
-  fontFamily:
-    "system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif",
-} as const;
-
-const muted = { color: "#666", fontSize: 12 } as const;
-const grid2 = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } as const;
-const grid4 = { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 } as const;
-const inp = {
-  width: "100%",
-  padding: 10,
-  margin: "6px 0",
-  border: "1px solid #ddd",
-  borderRadius: 10,
-} as const;
-const btn = {
-  padding: "10px 16px",
-  borderRadius: 10,
-  border: "1px solid #ddd",
-  background: "#e2001a",
-  color: "#fff",
-  cursor: "pointer",
-} as const;
-const card = { border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" } as const;
-
-// Utils
-function safeJson(x: string) {
+// --- Utils ---
+function parseMaybeJson(x: string) {
   try {
     return JSON.parse(x);
   } catch {
     return {};
+  }
+}
+
+function safeString(x: unknown) {
+  if (!x) return "";
+  try {
+    return typeof x === "string" ? x : JSON.stringify(x);
+  } catch {
+    return "";
   }
 }
