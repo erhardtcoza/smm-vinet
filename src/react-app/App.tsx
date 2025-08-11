@@ -2,7 +2,7 @@
 import { useState } from "react";
 import "./App.css";
 
-// ---- Types ----
+// Types
 type Plan = { id: number; week_start: string; platform: string; status: string };
 type Post = {
   id: number;
@@ -24,8 +24,8 @@ type SeoRow = {
   issues_json: string | null;
 };
 
-// Same-origin API base
-const API = ""; // e.g. fetch(`${API}/api/health`) -> '/api/health'
+// Same-origin API
+const API = ""; // fetch(`${API}/api/...`) -> "/api/..."
 
 export default function App() {
   // Company form
@@ -41,7 +41,9 @@ export default function App() {
   const [companyId, setCompanyId] = useState<number | null>(null);
 
   // Planner
-  const [week, setWeek] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [week, setWeek] = useState<string>(
+    new Date().toISOString().slice(0, 10)
+  );
   const [platforms, setPlatforms] = useState<string[]>([
     "facebook",
     "instagram",
@@ -49,7 +51,7 @@ export default function App() {
     "x",
   ]);
 
-  // Views
+  // Data
   const [plans, setPlans] = useState<Plan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
@@ -59,7 +61,7 @@ export default function App() {
 
   const push = (m: string) => setLog((l) => [m, ...l]);
 
-  // ---- Actions ----
+  // Actions
   async function saveCompany() {
     const payload = {
       ...company,
@@ -122,7 +124,9 @@ export default function App() {
     if (!companyId) return alert("Save company first");
     if (!auditUrl) return alert("Enter a URL to audit");
     const r = await fetch(
-      `/api/seo/audit?company_id=${companyId}&url=${encodeURIComponent(auditUrl)}`
+      `/api/seo/audit?company_id=${companyId}&url=${encodeURIComponent(
+        auditUrl
+      )}`
     );
     const j = await r.json();
     if (j.error) return alert(j.error);
@@ -139,7 +143,7 @@ export default function App() {
     push(`Loaded SEO rows: ${j.pages?.length || 0}`);
   }
 
-  // ---- UI ----
+  // UI
   return (
     <div style={wrap}>
       <h2>Social Media Planner</h2>
@@ -382,7 +386,7 @@ export default function App() {
         )}
       </div>
 
-      {/* Activity log */}
+      {/* Activity */}
       <h3 style={{ marginTop: 24 }}>Activity</h3>
       <ul>
         {log.map((l, i) => (
@@ -393,7 +397,7 @@ export default function App() {
   );
 }
 
-// ---- Styles (inline, minimal) ----
+// Styles
 const wrap = {
   maxWidth: 1100,
   margin: "40px auto",
@@ -404,6 +408,7 @@ const wrap = {
   fontFamily:
     "system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif",
 } as const;
+
 const muted = { color: "#666", fontSize: 12 } as const;
 const grid2 = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } as const;
 const grid4 = { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 } as const;
@@ -424,7 +429,7 @@ const btn = {
 } as const;
 const card = { border: "1px solid #eee", borderRadius: 12, padding: 12, background: "#fff" } as const;
 
-// ---- Utils ----
+// Utils
 function safeJson(x: string) {
   try {
     return JSON.parse(x);
